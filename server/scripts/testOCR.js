@@ -23,7 +23,7 @@ async function testOCR() {
       {
         headers: {
           ...form.getHeaders(),
-          apikey: process.env.OCR_API_KEY || "K87899142388957",
+          apikey: process.env.OCR_API_KEY,
         },
         timeout: 30000,
       }
