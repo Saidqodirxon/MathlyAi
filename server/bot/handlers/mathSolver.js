@@ -34,7 +34,7 @@ const handleTextProblem = async (ctx) => {
     // Check if user is in problem-solving state
     const currentState = userStates.get(telegramId);
     console.log(`[handleTextProblem] User ${telegramId} state:`, currentState);
-    
+
     if (currentState !== "waiting_for_problem") {
       return; // Ignore non-problem text
     }
