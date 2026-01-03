@@ -1,0 +1,22 @@
+{
+  "name": "mathlyai",
+  "version": "1.0.0",
+  "description": "MathlyAi - Telegram bot for solving math problems",
+  "private": true,
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../admin && npm install",
+    "dev:server": "cd server && npm run dev",
+    "dev:admin": "cd admin && npm run dev",
+    "start:server": "cd server && npm start",
+    "build:admin": "cd admin && npm run build"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "math",
+    "ai",
+    "education"
+  ],
+  "author": "",
+  "license": "MIT"
+}
