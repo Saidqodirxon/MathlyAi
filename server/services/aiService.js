@@ -307,6 +307,20 @@ const isMathematicalContent = (text) => {
     "kvadrat",
     "romb",
 
+    // Qatorlar va ketma-ketliklar (Series and Sequences)
+    "qator",
+    "seriya",
+    "ketma-ketlik",
+    "yig'indi",
+    "yigindi",
+    "limit",
+    "integral",
+    "hosila",
+    "differensial",
+    "yaqinlashish",
+    "uzoqlashish",
+    "yaqinlashuv",
+
     // Ruscha matematika so'zlari
     "решите",
     "вычислите",
@@ -317,6 +331,9 @@ const isMathematicalContent = (text) => {
     "формула",
     "корень",
     "квадрат",
+    "ряд",
+    "сумма",
+    "последовательность",
 
     // Inglizcha
     "solve",
@@ -328,11 +345,17 @@ const isMathematicalContent = (text) => {
     "math",
     "algebra",
     "geometry",
+    "series",
+    "sequence",
+    "sum",
+    "limit",
+    "integral",
+    "derivative",
   ];
 
-  const mathSymbols = /[+\-*/=÷×√∛∜∫∑∏πθαβγ]/;
+  const mathSymbols = /[+\-*/=÷×√∛∜∫∑∏πθαβγΣ∞]/;
   const mathPatterns =
-    /\d+\s*[+\-*/÷×=]\s*\d+|x\^?\d+|\d+\/\d+|sin|cos|tan|log/i;
+    /\d+\s*[+\-*/÷×=]\s*\d+|x\^?\d+|\d+\/\d+|sin|cos|tan|log|lim|\∫|Σ|n=|1\/n/i;
 
   const lowerText = text.toLowerCase();
 
@@ -349,48 +372,143 @@ const isMathematicalContent = (text) => {
 };
 
 /**
+ * Classify problem type heuristically
+ * Returns one of: 'algebra', 'geometry', 'calculus', 'series', 'text_logic', 'general_math', 'clarify'
+ */
+const classifyProblem = (text) => {
+  if (!text || !text.trim()) return "clarify";
+  const t = text.toLowerCase();
+
+  // Calculus/Analysis: limit, integral, hosila, differensial
+  if (
+    /(\blim\b|limit|\bint\b|integral|∫|hosila|differensial|derivative|dx|dy|dt)/.test(
+      t
+    )
+  ) {
+    return "calculus";
+  }
+
+  // Series/Sequences: qator, Σ, yig'indi, n=1, seriya, ketma-ketlik, rekursiv
+  if (
+    /(qator|seriya|ketma-ketlik|yig'indi|yigindi|Σ|∑|sum|series|sequence|n=|1\/n|yaqinlash|convergence|rekursiv|aₙ|a_n|a\d+|umumiy\s+formula|yopiq\s+ko'rinish)/.test(
+      t
+    )
+  ) {
+    return "series";
+  }
+
+  // Algebra heuristics: variables, =, x, coefficients, equation words
+  if (
+    /[=<>]|\b(x|y|z|a|b|c)\b/.test(t) ||
+    /tenglama|tengsizlik|x\^|\bsolve\b/.test(t)
+  ) {
+    return "algebra";
+  }
+
+  // Geometry heuristics: shapes, perimetr, maydon, radius, burchak
+  if (
+    /(uchburchak|kvadrat|to'rtburchak|romb|perimetr|maydon|radius|diametr|burchak|aylana|doira)/.test(
+      t
+    )
+  ) {
+    return "geometry";
+  }
+
+  // Text-only logical math: words like agar, faraz, nechta, mantiq, nechta usul
+  if (
+    /\b(agar|faraz|nechta|necha|mantiq|qanday|taqqosla|nechta\s+usul)\b/.test(
+      t
+    ) &&
+    !/[=<>+\-*/\d]/.test(t)
+  ) {
+    return "text_logic";
+  }
+
+  // If it contains clear math keywords or symbols, treat as general_math
+  if (isMathematicalContent(text)) return "general_math";
+
+  return "clarify";
+};
+
+/**
  * Solve math problem using AI
  * @param {string} problemText - The math problem to solve
  * @returns {Promise<string>} - The solution with step-by-step explanation
  */
 const solveMathProblem = async (problemText) => {
   try {
-    // Pre-check: Filter non-mathematical questions BEFORE calling AI
-    if (!isMathematicalContent(problemText)) {
-      return "Kechirasiz, men faqat matematik masalalarni yechaman. Iltimos qaytadan urinib ko'ring.";
+    const type = classifyProblem(problemText);
+
+    if (type === "clarify") {
+      return {
+        status: "clarify",
+        text: "Iltimos, masalani biroz aniqroq yozing: raqamlar, o'zgaruvchilar yoki rasm bormi? Agar matnli mantiqiy savol bo'lsa, iltimos so'zni to'liq yozing.",
+      };
     }
 
-    // Construct the prompt according to requirements
-    const prompt = `Siz professional matematika o'qituvchisisiz.
-Faqat matematik masalalar va matematik savollarni yechasiz.
+    // Build type-specific prompt with 1-2 few-shot examples (plain text output expected)
+    let promptHeader = `Siz professional matematika o'qituvchisisiz va foydalanuvchining savollarini bosqichma-bosqich, oddiy o'zbek tilida tushuntirib yechasiz.
 
-Matematik masalalar quyidagilarni o'z ichiga oladi:
-- Arifmetik hisoblashlar (qo'shish, ayirish, ko'paytirish, bo'lish)
-- Algebra (tenglama, tengsizlik, x, y, z o'zgaruvchilar)
-- Geometriya (yuz, hajm, perimetr, burchaklar)
-- Trigonometriya (sin, cos, tan)
-- Funksiyalar va grafiklar
-- Mantiqiy matematik masalalar
+MUHIM FORMATLAR (QATIY QOIDALAR):
+- Javobni FAQAT oddiy matn formatida bering
+- LaTeX ISHLATMANG: \\(, \\), \\frac, \\left, \\right, \\sqrt kabi belgilarni MUTLAQO ISHLATMANG
+- Kasr sonlar: 4/3, 5/2, 1/2 (yoki "to'rtdan uch", "ikkidan bir")
+- Koordinatalar: (1, 4/3) yoki G(1, 4/3) - oddiy qavs
+- Daraja: x², x³, x⁴ (yoki x^2, x^3, x^4)
+- Ildiz: √2, √5, √32, √100 (HECH QACHON sqrt() ISHLATMANG!)
+- Pi: π yoki 3.14
+- Cheksizlik: ∞
+- Oxirida "Yakuniy Javob:" deb yozing
 
-Agar savol matematik bo'lmasa:
-- "Kechirasiz, men faqat matematik masalalarni yechaman. Iltimos matematik masala yuboring." deb javob bering.
+TO'G'RI MISOL:
+- √32 (to'g'ri) emas sqrt(32) (noto'g'ri)
+- 4/3 (to'g'ri) emas \\frac{4}{3} (noto'g'ri)  
+- (1, 4/3) (to'g'ri) emas \\left(1, \\frac{4}{3}\\right) (noto'g'ri)
+- AB = √((5-1)² + (-2-2)²) = √(16 + 16) = √32 = 4√2
 
-Agar matematik masala bo'lsa:
-- Masalani bosqichma-bosqich yeching
-- Har bir bosqichni aniq va oddiy tushuntiring
-- O'zbek tilida to'g'ri so'zlarni ishlating: "qavs" (parantez emas), "ko'paytirish", "bo'lish"
-- Oddiy matn formatda yozing - emoji, maxsus belgilar, markdown ishlatmang
-- Kasr sonlar uchun oddiy format: "1/3" yoki "bir uchdan bir"
-- Oxirida "Yakuniy Javob: ..." deb yozing
+ESLATMA: x' yoki x" kabi belgilar daraja bo'lishi mumkin (OCR xatosi).`;
 
-Masala:
-${problemText}`;
+    let fewShot = "";
+
+    if (type === "algebra") {
+      fewShot =
+        "Misol 1: Masala: 2x + 3 = 11\nQadam 1: 2x = 11 - 3 = 8\nQadam 2: x = 8/2 = 4\nYakuniy Javob: x = 4\n---\nMisol 2: Masala: x² - 5x + 6 = 0\nQadam 1: Faktorizatsiya (x - 2)(x - 3) = 0\nQadam 2: x = 2 yoki x = 3\nYakuniy Javob: x = 2, x = 3\n---\n";
+    } else if (type === "geometry") {
+      fewShot =
+        "Misol: Masala: Uchburchakning asosiga 6 va balandligi 4 bo'lsa, maydonini toping.\nQadam 1: Maydon = 1/2 * asos * balandlik = 1/2 * 6 * 4 = 12\nYakuniy Javob: 12\n---\nMisol 2: Tomon uzunligi = √(4² + 3²) = √(16 + 9) = √25 = 5\n---\n";
+    } else if (type === "calculus") {
+      fewShot =
+        "Misol 1: Masala: lim (x→0) (e^x - 1 - x) / x²\nQadam 1: L'Hospital qoidasini qo'llaymiz\nQadam 2: Surat hosilasi: e^x - 1; Maxraj hosilasi: 2x\nQadam 3: lim (x→0) (e^x - 1) / 2x = 0/0 (yana L'Hospital)\nQadam 4: lim (x→0) e^x / 2 = 1/2\nYakuniy Javob: 1/2\n---\nMisol 2: Masala: ∫₀¹ x ln(x) dx\nQadam 1: Bo'laklab integrallash: u = ln(x), dv = x dx\nQadam 2: du = 1/x dx, v = x²/2\nQadam 3: ∫ x ln(x) dx = (x²/2)ln(x) - ∫ x/2 dx\nQadam 4: = (x²/2)ln(x) - x²/4\nQadam 5: [0 dan 1 gacha]: (1/2)ln(1) - 1/4 - 0 = -1/4\nYakuniy Javob: -1/4\n---\n";
+    } else if (type === "series") {
+      fewShot =
+        "Misol 1: Masala: Σ(n=1 to ∞) 1/n² ni toping va asoslab tushuntiring.\nQadam 1: Bu Basel masalasi deb ataladi\nQadam 2: Bu qator yaqinlashadi (p-test: p=2 > 1)\nQadam 3: Yig'indisi: π²/6 ≈ 1.6449\nQadam 4: Euler tomonidan 1735 yilda isbotlangan\nTushuntirish: Har bir had 1/n² shaklida, n ortishi bilan tez kichrayadi. Geometrik jihatdan, bu funksiya integrali chekli.\nYakuniy Javob: π²/6\n---\nMisol 2: Masala: Σ(n=1 to ∞) 1/2^n\nQadam 1: Bu geometrik qator, r = 1/2\nQadam 2: Geometrik qator yig'indisi: a/(1-r) = (1/2)/(1-1/2) = 1\nYakuniy Javob: 1\n---\nMisol 3: Masala: Agar ketma-ketlik a₁ = 2, aₙ₊₁ = 3aₙ - 1. Umumiy formulani toping.\nQadam 1: Rekursiv formula: aₙ₊₁ = 3aₙ - 1\nQadam 2: Bir necha hadni hisoblaymiz: a₁=2, a₂=3(2)-1=5, a₃=3(5)-1=14\nQadam 3: Yopiq ko'rinishni topish: aₙ₊₁ - c = 3(aₙ - c), c = 1/2\nQadam 4: aₙ - 1/2 = 3ⁿ⁻¹(a₁ - 1/2) = 3ⁿ⁻¹(3/2)\nQadam 5: aₙ = (3/2)·3ⁿ⁻¹ + 1/2 = (3ⁿ + 1)/2\nYakuniy Javob: aₙ = (3ⁿ + 1)/2\n---\n";
+    } else if (type === "text_logic") {
+      fewShot =
+        "Misol: Masala: Agar barcha A lar B bo'lsa va ba'zi B lar C bo'lsa, A lar C lar degani to'g'rimi?\nQadam 1: A subset B; some B subset C. Barcha A lar C bo'lishini ta'minlamaydi.\nYakuniy Javob: Yo'q, kafolatlanmaydi.\n---\n";
+    } else {
+      fewShot =
+        "Misol: Masala: 5 + 3 * 2 ni hisoblang.\nQadam 1: 3*2 = 6\nQadam 2: 5 + 6 = 11\nYakuniy Javob: 11\n---\n";
+    }
+
+    const prompt = `${promptHeader}\n\n${fewShot}Savol turi: ${type}\nMasala: ${problemText}\n\nIltimos: bosqichlarni numeratsiya qiling yoki 'Qadam 1', 'Qadam 2' kabi yozing.`;
 
     const response = await callAIWithFallback(prompt);
-    return response;
+
+    if (!response) return { status: "error", text: null };
+
+    // If AI thinks the question is non-math, return reject
+    const lower = response.toLowerCase();
+    if (
+      lower.includes("kechirasiz") &&
+      lower.includes("faqat matematik masal")
+    ) {
+      return { status: "reject", text: response };
+    }
+
+    return { status: "solution", text: response };
   } catch (error) {
     console.error("Error in solveMathProblem:", error);
-    return null;
+    return { status: "error", text: null };
   }
 };
 
@@ -430,3 +548,49 @@ module.exports = {
   getActiveProvider,
   callAIWithFallback,
 };
+
+// Export classifier and add structured solver
+module.exports.classifyProblem = classifyProblem;
+
+/**
+ * Solve and request structured JSON output from the AI.
+ * Returns parsed JSON or { status: 'error', text: null }
+ */
+const solveMathProblemStructured = async (problemText) => {
+  try {
+    const type = classifyProblem(problemText);
+
+    if (type === "clarify") {
+      return { status: "clarify", text: "Iltimos masalani aniqroq yozing." };
+    }
+
+    const schemaExample = `{
+  "type": "algebra|geometry|text_logic|general_math",
+  "formalization": "(optional) formalized statement",
+  "steps": ["Qadam 1: ...", "Qadam 2: ..."],
+  "final_answer": "..."
+}`;
+
+    const prompt = `Siz professional matematika o'qituvchisisiz. Foydalanuvchining masalasini bosqichma-bosqich yeching va faqat JSON formatida bering. JSON sxemasining misoli:\n${schemaExample}\n\nMasala turi: ${type}\nMasala: ${problemText}\n\nEslatma: Javob faqat valid JSON bo'lsin, hech qanday qo'shimcha matn bo'lmasin.`;
+
+    const responseText = await callAIWithFallback(prompt);
+    if (!responseText) return { status: "error", text: null };
+
+    // Try parse JSON tolerant
+    try {
+      const jsonStart = responseText.indexOf("{");
+      const jsonString =
+        jsonStart >= 0 ? responseText.slice(jsonStart) : responseText;
+      const parsed = JSON.parse(jsonString);
+      return { status: "solution", json: parsed };
+    } catch (e) {
+      console.warn("Failed to parse structured AI response:", e.message);
+      return { status: "error", text: responseText };
+    }
+  } catch (error) {
+    console.error("Error in solveMathProblemStructured:", error);
+    return { status: "error", text: null };
+  }
+};
+
+module.exports.solveMathProblemStructured = solveMathProblemStructured;

@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const { classifyProblem } = require("../services/aiService");
 
 /**
  * Middleware to check if user exists and is not blocked
@@ -120,3 +121,25 @@ module.exports = {
   checkDailyLimit,
   checkChannelSubscription,
 };
+
+/**
+ * Middleware: classify incoming message/problem and set ctx.state.problemType
+ */
+const classifyProblemMiddleware = async (ctx, next) => {
+  try {
+    // Prefer text content
+    if (ctx.message && ctx.message.text) {
+      ctx.state.problemType = classifyProblem(ctx.message.text);
+    } else if (ctx.message && ctx.message.photo) {
+      ctx.state.problemType = "image";
+    } else {
+      ctx.state.problemType = "unknown";
+    }
+    return next();
+  } catch (error) {
+    console.error("Error in classifyProblemMiddleware:", error);
+    return next();
+  }
+};
+
+module.exports.classifyProblemMiddleware = classifyProblemMiddleware;
